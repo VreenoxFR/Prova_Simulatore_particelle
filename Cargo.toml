@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 rand = "0.8"
 minifb = "0.17"
+rusttype = "0.9"

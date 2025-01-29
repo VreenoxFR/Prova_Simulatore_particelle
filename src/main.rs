@@ -1,12 +1,12 @@
 use minifb::{Key, MouseButton, MouseMode, Window, WindowOptions};
 use rand::Rng;
+use rusttype::{point, Font, Scale};
+use std::time::Instant;
 
-const WIDTH: usize = 1280; // Larghezza della finestra
-const HEIGHT: usize = 720; // Altezza della finestra
-const PARTICLE_COUNT: usize = 100; // Numero di particelle
-const PARTICLE_SIZE: usize = 10; // Grandezza delle particelle
-const GRAVITY: f32 = 0.2; // Intensità della gravità
-const AIR_FRICTION: f32 = 0.99; // Coefficiente di attrito con l'aria (0.99 per rallentare gradualmente)
+const WIDTH: usize = 1280;
+const HEIGHT: usize = 720;
+const GRAVITY: f32 = 0.2;
+const AIR_FRICTION: f32 = 0.99;
 
 #[derive(Clone, Copy)]
 struct Particle {
@@ -18,151 +18,151 @@ struct Particle {
 }
 
 impl Particle {
-    fn new(x: f32, y: f32, vx: f32, vy: f32, color: u32) -> Self {
-        Particle {
-            x,
-            y,
-            vx,
-            vy,
-            color,
-        }
-    }
-
-    fn update(&mut self, gravity_enabled: bool) {
-        // Applica la gravità se abilitata
+    fn update(&mut self, gravity_enabled: bool, collision_enabled: bool) {
         if gravity_enabled {
             self.vy += GRAVITY;
         }
-
-        // Applica l'attrito con l'aria
         self.vx *= AIR_FRICTION;
         self.vy *= AIR_FRICTION;
-
-        // Aggiorna la posizione
         self.x += self.vx;
         self.y += self.vy;
-
-        // Rimbalza sui bordi della finestra
-        if self.x <= 0.0 || self.x >= WIDTH as f32 {
-            self.vx = -self.vx;
-        }
-        if self.y <= 0.0 || self.y >= HEIGHT as f32 {
-            self.vy = -self.vy;
-        }
-
-        // Mantieni le particelle entro i limiti della finestra
-        self.x = self.x.clamp(0.0, WIDTH as f32);
-        self.y = self.y.clamp(0.0, HEIGHT as f32);
-    }
-
-    fn distance_to(&self, other: &Particle) -> f32 {
-        ((self.x - other.x).powi(2) + (self.y - other.y).powi(2)).sqrt()
-    }
-
-    fn apply_collision(&mut self, other: &mut Particle) {
-        let dist = self.distance_to(other);
-
-        // Collisione: se la distanza tra le particelle è inferiore alla somma delle loro dimensioni
-        if dist < PARTICLE_SIZE as f32 {
-            // Semplice scambio delle velocità
-            let temp_vx = self.vx;
-            let temp_vy = self.vy;
-
-            self.vx = other.vx;
-            self.vy = other.vy;
-
-            other.vx = temp_vx;
-            other.vy = temp_vy;
-        }
-    }
-
-    fn move_towards(&mut self, target_x: f32, target_y: f32) {
-        let dx = target_x - self.x;
-        let dy = target_y - self.y;
-        let distance = (dx.powi(2) + dy.powi(2)).sqrt();
-
-        if distance > 1.0 {
-            self.vx += dx / distance * 0.5; // Aggiungi una piccola forza verso il target
-            self.vy += dy / distance * 0.5;
+        if collision_enabled {
+            if self.x <= 0.0 || self.x >= WIDTH as f32 {
+                self.vx = -self.vx;
+            }
+            if self.y <= 0.0 || self.y >= HEIGHT as f32 {
+                self.vy = -self.vy;
+            }
+            self.x = self.x.clamp(0.0, WIDTH as f32);
+            self.y = self.y.clamp(0.0, HEIGHT as f32);
         }
     }
 }
 
-fn draw_particle(buffer: &mut Vec<u32>, particle: &Particle) {
-    let px = particle.x as usize;
-    let py = particle.y as usize;
+fn draw_text(buffer: &mut Vec<u32>, text: &str, x: usize, y: usize, font: &Font) {
+    let scale = Scale::uniform(24.0);
+    let v_metrics = font.v_metrics(scale);
+    let offset = point(x as f32, y as f32 + v_metrics.ascent);
 
-    for dy in 0..PARTICLE_SIZE {
-        for dx in 0..PARTICLE_SIZE {
-            let x = px + dx;
-            let y = py + dy;
-
-            if x < WIDTH && y < HEIGHT {
-                buffer[y * WIDTH + x] = particle.color;
-            }
+    for glyph in font.layout(text, scale, offset) {
+        if let Some(bb) = glyph.pixel_bounding_box() {
+            glyph.draw(|gx, gy, v| {
+                let px = (bb.min.x + gx as i32) as usize;
+                let py = (bb.min.y + gy as i32) as usize;
+                if px < WIDTH && py < HEIGHT {
+                    let intensity = (v * 255.0) as u32;
+                    let color = (intensity << 16) | (intensity << 8) | intensity;
+                    buffer[py * WIDTH + px] = color;
+                }
+            });
         }
     }
 }
 
 fn main() {
+    let font_data = include_bytes!("/Users/vreenox/Desktop/ciambella/ciambella_e_particelle/rust/Prova_Simulatore_particelle/assets/Fira_Code,Roboto/Roboto/static/Roboto_Condensed-SemiBold.ttf");
+    let font = Font::try_from_bytes(font_data as &[u8]).expect("Failed to load font");
+
     let mut window = Window::new(
-        "Simulatore di particelle - Premi ESC per uscire",
+        "Particle Simulation",
         WIDTH,
         HEIGHT,
         WindowOptions::default(),
     )
-    .unwrap_or_else(|e| {
-        panic!("Errore nella creazione della finestra: {}", e);
-    });
-
-    window.limit_update_rate(Some(std::time::Duration::from_micros(16600))); // ~60 FPS
+    .unwrap_or_else(|e| panic!("Window creation error: {}", e));
 
     let mut rng = rand::thread_rng();
-    let mut particles: Vec<Particle> = (0..PARTICLE_COUNT)
-        .map(|_| {
-            Particle::new(
-                rng.gen_range(0.0..WIDTH as f32),
-                rng.gen_range(0.0..HEIGHT as f32),
-                rng.gen_range(-2.0..2.0),           // Velocità X casuale
-                rng.gen_range(-2.0..2.0),           // Velocità Y casuale
-                rng.gen_range(0x0000FF..=0xFFFFFF), // Colore casuale
-            )
+    let mut particle_size = 10;
+    let mut particles: Vec<Particle> = (0..100)
+        .map(|_| Particle {
+            x: rng.gen_range(0.0..WIDTH as f32),
+            y: rng.gen_range(0.0..HEIGHT as f32),
+            vx: rng.gen_range(-2.0..2.0),
+            vy: rng.gen_range(-2.0..2.0),
+            color: rng.gen_range(0x0000FF..=0xFFFFFF),
         })
         .collect();
 
     let mut buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
     let mut gravity_enabled = false;
+    let mut collision_enabled = false;
+    let mut last_time = Instant::now();
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        buffer.iter_mut().for_each(|pixel| *pixel = 0x000000); // Pulisce il buffer (nero)
+        let elapsed = last_time.elapsed().as_secs_f32();
+        last_time = Instant::now();
+        let fps = 1.0 / elapsed;
 
-        // Controlla la posizione del mouse
+        buffer.fill(0x000000);
         let mouse_pos = window.get_mouse_pos(MouseMode::Clamp).unwrap_or((0.0, 0.0));
         let mouse_pressed = window.get_mouse_down(MouseButton::Right);
 
-        // Controlla se il tasto "A" è stato premuto per attivare/disattivare la gravità
         if window.is_key_pressed(Key::G, minifb::KeyRepeat::No) {
-            gravity_enabled = !gravity_enabled; // Alterna lo stato della gravità
+            gravity_enabled = !gravity_enabled;
         }
-
-        // Gestisce le collisioni tra particelle
-        for i in 0..particles.len() {
-            for j in i + 1..particles.len() {
-                let (p1, p2) = particles.split_at_mut(j);
-                p1[i].apply_collision(&mut p2[0]);
+        if window.is_key_pressed(Key::C, minifb::KeyRepeat::No) {
+            collision_enabled = !collision_enabled;
+        }
+        if window.is_key_pressed(Key::Up, minifb::KeyRepeat::Yes) {
+            for _ in 0..1000 {
+                particles.push(Particle {
+                    x: rng.gen_range(0.0..WIDTH as f32),
+                    y: rng.gen_range(0.0..HEIGHT as f32),
+                    vx: rng.gen_range(-2.0..2.0),
+                    vy: rng.gen_range(-2.0..2.0),
+                    color: rng.gen_range(0x0000FF..=0xFFFFFF),
+                });
+            }
+        }
+        if window.is_key_pressed(Key::Down, minifb::KeyRepeat::Yes) {
+            let remove_count = particles.len().min(1000);
+            particles.truncate(particles.len() - remove_count);
+        }
+        if window.is_key_pressed(Key::Right, minifb::KeyRepeat::Yes) {
+            particle_size += 1;
+        }
+        if window.is_key_pressed(Key::Left, minifb::KeyRepeat::Yes) {
+            if particle_size > 1 {
+                particle_size -= 1;
             }
         }
 
-        // Aggiorna e disegna le particelle
-        for particle in &mut particles {
+        for p in particles.iter_mut() {
             if mouse_pressed {
-                particle.move_towards(mouse_pos.0, mouse_pos.1);
+                let dx = mouse_pos.0 - p.x;
+                let dy = mouse_pos.1 - p.y;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist > 1.0 {
+                    p.vx += dx / dist * 0.5;
+                    p.vy += dy / dist * 0.5;
+                }
             }
-            particle.update(gravity_enabled);
-            draw_particle(&mut buffer, particle);
+            p.update(gravity_enabled, collision_enabled);
         }
 
-        // Aggiorna la finestra con il buffer
+        for p in &particles {
+            let px = p.x as usize;
+            let py = p.y as usize;
+            for dy in 0..particle_size {
+                for dx in 0..particle_size {
+                    let x = px + dx;
+                    let y = py + dy;
+                    if x < WIDTH && y < HEIGHT {
+                        buffer[y * WIDTH + x] = p.color;
+                    }
+                }
+            }
+        }
+
+        draw_text(&mut buffer, &format!("FPS: {:.2}", fps), 10, 10, &font);
+        draw_text(
+            &mut buffer,
+            &format!("Particles: {}", particles.len()),
+            10,
+            30,
+            &font,
+        );
+
         window.update_with_buffer(&buffer, WIDTH, HEIGHT).unwrap();
     }
 }
