@@ -97,12 +97,16 @@ fn main() {
         let mouse_pos = window.get_mouse_pos(MouseMode::Clamp).unwrap_or((0.0, 0.0));
         let mouse_pressed = window.get_mouse_down(MouseButton::Right);
 
+        let mouse_pos1 = window.get_mouse_pos(MouseMode::Clamp).unwrap_or((0.0, 0.0));
+        let mouse_pressed1 = window.is_key_pressed(Key::R, minifb::KeyRepeat::Yes);
+
         if window.is_key_pressed(Key::G, minifb::KeyRepeat::No) {
             gravity_enabled = !gravity_enabled;
         }
         if window.is_key_pressed(Key::C, minifb::KeyRepeat::No) {
             collision_enabled = !collision_enabled;
         }
+
         if window.is_key_pressed(Key::Up, minifb::KeyRepeat::Yes) {
             for _ in 0..1000 {
                 particles.push(Particle {
@@ -126,7 +130,17 @@ fn main() {
                 particle_size -= 1;
             }
         }
-
+        for p in particles.iter_mut() {
+            if mouse_pressed1 {
+                let dx = mouse_pos1.0 - p.x;
+                let dy = mouse_pos1.1 - p.y;
+                let radius = (dx * dx + dy * dy).sqrt(); // Calculate the radius
+                if radius > 1.0 {
+                    p.vx -= dx / radius * 0.5;
+                    p.vy -= dy / radius * 0.5; // Use dy instead of dx for vy
+                }
+            }
+        }
         for p in particles.iter_mut() {
             if mouse_pressed {
                 let dx = mouse_pos.0 - p.x;
