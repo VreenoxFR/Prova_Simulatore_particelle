@@ -1,4 +1,4 @@
-### Simulatoiore di particelle
+# Simulatoiore di particelle
 
 
 sono nuovo alla programmazzione e a Rust
@@ -7,7 +7,7 @@ sono nuovo alla programmazzione e a Rust
 questo è un simulatore di particelle rapido e basilare srito compleatamente in rust usando come
 dependencies solo minifb
 
-# Tasti per usarlo
+## Tasti per usarlo
 - Tasto sinistro: attrae le particelle al puntatore
 - Tasto R: se si tiene premuto le allontana dal puntatore
 - Tasto G: attiva e disattiva la gravità
